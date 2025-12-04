@@ -12,8 +12,10 @@ BASE_DIR="/data/sofusion20/mibench_eval"
 MIBENCH_DIR="$BASE_DIR/mibench"
 IR_DIR="$BASE_DIR/ir_data"
 
-# LLVM 경로 (환경에 맞게 수정)
-LLVM_BIN="/data/sofusion20/llvm-17/bin"
+
+# LLVM 경로 
+LLVM_BIN="/data/sofusion20/anaconda3/envs/llvm-opt/bin"
+
 CLANG="$LLVM_BIN/clang"
 
 echo "=== MiBench 벤치마크 설정 ==="

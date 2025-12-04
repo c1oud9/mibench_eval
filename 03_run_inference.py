@@ -250,7 +250,12 @@ def run_inference(model_path: str, use_lora: bool = False,
     valid_count = sum(1 for r in results if r["is_valid"])
     print(f"\n=== 추론 완료 ===")
     print(f"총 프롬프트: {len(results)}")
-    print(f"유효한 pass list: {valid_count} ({100*valid_count/len(results):.1f}%)")
+
+    if len(results) > 0:
+        print(f"유효한 pass list: {valid_count} ({100*valid_count/len(results):.1f}%)")
+    else:
+        print(f"경고: 처리된 프롬프트가 없습니다!")
+        
     print(f"결과 파일: {output_file}")
     
     return results

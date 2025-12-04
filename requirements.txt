@@ -1,0 +1,18 @@
+# MiBench 벤치마크 평가 파이프라인 의존성
+
+# ML/모델
+torch>=2.0.0
+transformers>=4.35.0
+peft>=0.7.0
+accelerate>=0.25.0
+
+# 데이터 처리
+pandas>=2.0.0
+numpy>=1.24.0
+tqdm>=4.65.0
+
+# 시각화
+matplotlib>=3.7.0
+
+# 기타
+jsonlines>=4.0.0

@@ -1,0 +1,115 @@
+# MiBench 벤치마크 평가 파이프라인
+
+LLM Compiler 논문 방법론 기반 컴파일러 최적화 성능 평가
+
+## 개요
+
+MiBench 벤치마크를 사용하여 모델이 생성한 LLVM pass list의 
+binary size 최적화 성능을 측정합니다.
+
+### 평가 메트릭 (논문 Table 3 기준)
+- **Improved**: -Oz 대비 binary size가 감소한 파일 수
+- **Regressed**: -Oz 대비 binary size가 증가한 파일 수
+- **Zero-shot**: 모델 출력 그대로 사용시 평균 개선율
+- **-Oz backup**: 악화시 -Oz로 대체했을 때 평균 개선율
+
+## 디렉토리 구조
+
+```
+mibench_eval/
+├── config.py              # 경로/설정
+├── 01_setup_mibench.sh    # MiBench 다운로드 및 IR 생성
+├── 02_generate_prompts.py # 프롬프트 생성
+├── 03_run_inference.py    # 모델 추론
+├── 04_evaluate_binary_size.py  # 최적화 평가
+├── 05_generate_report.py  # 리포트 생성
+├── run_evaluation.sh      # SLURM 배치 스크립트
+└── requirements.txt
+```
+
+## 사용법
+
+### 1. 환경 설정 (최초 1회)
+
+```bash
+# Seraph 접속
+ssh sofusion20@aurora-master
+
+# 작업 디렉토리 생성
+mkdir -p /data/sofusion20/mibench_eval
+cd /data/sofusion20/mibench_eval
+
+# 파일 복사 (로컬에서)
+scp -r mibench_eval/* sofusion20@aurora-master:/data/sofusion20/mibench_eval/
+
+# 의존성 설치
+conda activate llvm-opt
+pip install -r requirements.txt
+```
+
+### 2. config.py 수정
+
+```python
+# LLVM 경로를 실제 환경에 맞게 수정
+LLVM_BIN = Path("/data/sofusion20/llvm-17/bin")
+
+# 모델 경로 (fine-tuned 모델 사용시)
+MODEL_DIR = Path("/data/sofusion20/models")
+```
+
+### 3. 전체 파이프라인 실행
+
+```bash
+# SLURM으로 배치 실행
+sbatch run_evaluation.sh
+
+# 또는 단계별 실행
+bash 01_setup_mibench.sh      # MiBench 설정
+python 02_generate_prompts.py # 프롬프트 생성
+python 03_run_inference.py    # 추론
+python 04_evaluate_binary_size.py  # 평가
+python 05_generate_report.py  # 리포트
+```
+
+### 4. Fine-tuned 모델 사용
+
+```bash
+# LoRA 모델 사용시
+python 03_run_inference.py \
+    --model bigcode/starcoderbase-1b \
+    --lora /data/sofusion20/models/lora_checkpoint
+```
+
+## 출력 결과
+
+```
+results/
+├── inference_results.jsonl    # 모델 추론 결과
+├── evaluation_results.jsonl   # 평가 결과
+└── report/
+    ├── summary_table.csv      # 요약 테이블
+    ├── benchmark_results.csv  # 벤치마크별 결과
+    ├── improvement_chart.png  # 개선율 차트
+    ├── distribution_chart.png # 분포 차트
+    └── evaluation_report_*.txt # 텍스트 리포트
+```
+
+## 논문 대비 차이점
+
+| 항목 | LLM Compiler 논문 | 본 파이프라인 |
+|------|------------------|--------------|
+| 모델 | 7B/13B | StarCoderBase-1B |
+| 벤치마크 | MiBench 24개 전체 | 동일 |
+| Context | 16k tokens | 15k tokens |
+| 메트릭 | Binary size | 동일 |
+
+## 주의사항
+
+1. **LLVM 버전**: LLVM 17.0.6 권장 (pass 이름 호환성)
+2. **메모리**: 추론시 GPU 메모리 24GB 필요
+3. **시간**: 전체 파이프라인 약 4-8시간 소요
+
+## 참고자료
+
+- [LLM Compiler 논문](https://arxiv.org/abs/2407.02524)
+- [MiBench 벤치마크](https://github.com/embecosm/mibench)

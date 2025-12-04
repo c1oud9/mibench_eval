@@ -1,107 +1,84 @@
-#!/bin/bash
-# ============================================================
-# Step 1: MiBench 다운로드 및 빌드
-# - MiBench 소스코드 다운로드
-# - 각 벤치마크를 LLVM IR로 컴파일
-# ============================================================
+"""
+MiBench 벤치마크 평가 파이프라인 설정
+- LLM Compiler 논문 방법론 기반
+- Seraph Aurora 클러스터 환경용
+"""
 
-set -e
+from pathlib import Path
 
+# ============================================================
 # 경로 설정
-BASE_DIR="/data/sofusion20/mibench_eval"
-MIBENCH_DIR="$BASE_DIR/mibench"
-IR_DIR="$BASE_DIR/ir_data"
+# ============================================================
+BASE_DIR = Path("/data/sofusion20/mibench_eval")
+MIBENCH_DIR = BASE_DIR / "mibench"
+IR_DIR = BASE_DIR / "ir_data"
+PROMPT_DIR = BASE_DIR / "prompts"
+RESULTS_DIR = BASE_DIR / "results"
+MODEL_DIR = Path("/data/sofusion20/models")
 
-# LLVM 경로 (환경에 맞게 수정)
-LLVM_BIN="/data/sofusion20/llvm-17/bin"
-CLANG="$LLVM_BIN/clang"
+# ============================================================
+# LLVM 도구 경로 (Seraph에 설치된 LLVM 17.0.6 기준)
+# ============================================================
+LLVM_BIN = Path("/data/sofusion20/llvm-17/bin")  # 필요시 수정
+CLANG = LLVM_BIN / "clang"
+OPT = LLVM_BIN / "opt"
+LLC = LLVM_BIN / "llc"
+LLVM_EXTRACT = LLVM_BIN / "llvm-extract"
+LLVM_SIZE = LLVM_BIN / "llvm-size"
 
-echo "=== MiBench 벤치마크 설정 ==="
 
-# 디렉토리 생성
-mkdir -p "$BASE_DIR"
-mkdir -p "$IR_DIR"
+# ============================================================
+# MiBench 벤치마크 목록 (논문 Table 10 기준)
+# ============================================================
+MIBENCH_BENCHMARKS = [
+    "automotive/basicmath",
+    "automotive/bitcount",
+    "automotive/qsort",
+    "automotive/susan",
+    "consumer/jpeg",      # jpeg_c, jpeg_d
+    "consumer/lame",
+    "consumer/tiff",      # tiff2bw, tiff2rgba, tiffdither, tiffmedian
+    "consumer/typeset",
+    "network/dijkstra",
+    "network/patricia",
+    "office/ghostscript",
+    "office/ispell",
+    "office/rsynth",
+    "office/stringsearch",
+    "security/blowfish",
+    "security/sha",
+    "telecomm/adpcm",
+    "telecomm/crc32",
+    "telecomm/fft",
+    "telecomm/gsm",
+]
 
-# MiBench 다운로드 (GitHub mirror)
-if [ ! -d "$MIBENCH_DIR" ]; then
-    echo "[1/3] MiBench 다운로드 중..."
-    cd "$BASE_DIR"
-    git clone https://github.com/embecosm/mibench.git
-    echo "다운로드 완료"
-else
-    echo "[1/3] MiBench 이미 존재함: $MIBENCH_DIR"
-fi
+# ============================================================
+# 모델 설정
+# ============================================================
+MODEL_NAME = ""  # 또는 fine-tuned 모델 경로
+MAX_TOKENS = 15000  # 논문: 15k token context window
+MAX_NEW_TOKENS = 2048
 
-# 벤치마크 목록
-BENCHMARKS=(
-    "automotive/basicmath"
-    "automotive/bitcount"
-    "automotive/qsort"
-    "automotive/susan"
-    "consumer/jpeg"
-    "consumer/lame"
-    "consumer/tiff"
-    "consumer/typeset"
-    "network/dijkstra"
-    "network/patricia"
-    "office/ghostscript"
-    "office/ispell"
-    "office/rsynth"
-    "office/stringsearch"
-    "security/blowfish"
-    "security/sha"
-    "telecomm/adpcm"
-    "telecomm/crc32"
-    "telecomm/fft"
-    "telecomm/gsm"
-)
+# ============================================================
+# 평가 설정
+# ============================================================
+BASELINE_OPT = "-Oz"  # 기준 최적화 레벨
+TIMEOUT_SECONDS = 120  # 컴파일 타임아웃
+NUM_PASSES_MIN = 1
+NUM_PASSES_MAX = 50
 
-echo "[2/3] 소스 파일에서 LLVM IR 생성 중..."
+# ============================================================
+# SLURM 설정 (Aurora 클러스터)
+# ============================================================
+SLURM_CONFIG = {
+    "partition": "ugrad",
+    "account": "ugrad",
+    "qos": "ugrad",
+    "gres": "gpu:1",
+    "cpus_per_gpu": 8,
+    "mem_per_gpu": "29G",
+    "time": "24:00:00",
+}
 
-# 각 벤치마크의 C 파일을 IR로 컴파일
-for bench in "${BENCHMARKS[@]}"; do
-    bench_name=$(basename "$bench")
-    bench_path="$MIBENCH_DIR/$bench"
-    ir_out_dir="$IR_DIR/$bench_name"
-    
-    if [ ! -d "$bench_path" ]; then
-        echo "  [SKIP] $bench_name: 디렉토리 없음"
-        continue
-    fi
-    
-    mkdir -p "$ir_out_dir"
-    
-    echo "  Processing: $bench_name"
-    
-    # C 파일 찾아서 IR로 컴파일
-    find "$bench_path" -name "*.c" -type f | while read -r src_file; do
-        filename=$(basename "$src_file" .c)
-        ir_file="$ir_out_dir/${filename}.ll"
-        
-        # 이미 존재하면 스킵
-        if [ -f "$ir_file" ]; then
-            continue
-        fi
-        
-        # Unoptimized IR 생성 (-O0, -emit-llvm)
-        # 헤더 경로 포함
-        include_dir=$(dirname "$src_file")
-        
-        $CLANG -O0 -Xclang -disable-O0-optnone \
-               -S -emit-llvm \
-               -I"$include_dir" \
-               -I"$MIBENCH_DIR" \
-               "$src_file" -o "$ir_file" 2>/dev/null || {
-            echo "    [WARN] 컴파일 실패: $filename"
-        }
-    done
-done
 
-# 생성된 IR 파일 수 확인
-IR_COUNT=$(find "$IR_DIR" -name "*.ll" | wc -l)
-echo "[3/3] IR 생성 완료: $IR_COUNT 개 파일"
-
-echo ""
-echo "=== 설정 완료 ==="
-echo "IR 디렉토리: $IR_DIR"
-echo "다음 단계: python 02_generate_prompts.py"

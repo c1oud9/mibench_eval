@@ -1,12 +1,10 @@
 #!/bin/bash
-#SBATCH --job-name=mibench_eval
+#SBATCH -J mibench_eval
 #SBATCH --gres=gpu:1
-#SBATCH --cpus-per-gpu=8
-#SBATCH --mem-per-gpu=29G
-#SBATCH --partition=ugrad
-#SBATCH --account=ugrad
-#SBATCH --qos=ugrad
+#SBATCH --cpus-per-task=8
+#SBATCH --mem-per-gpu=32G
 #SBATCH --time=24:00:00
+#SBATCH -p batch_ugrad
 #SBATCH --output=logs/mibench_eval_%j.out
 #SBATCH --error=logs/mibench_eval_%j.err
 
@@ -20,7 +18,7 @@ echo "Node: $SLURMD_NODENAME"
 echo "시작 시간: $(date)"
 echo "=========================================="
 
-source ~/.bashrc
+source /data/sofusion20/anaconda3/etc/profile.d/conda.sh
 conda activate llvm-opt
 
 cd /data/sofusion20/mibench_eval

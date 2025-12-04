@@ -89,6 +89,7 @@ for bench in "${BENCHMARKS[@]}"; do
         
         $CLANG -O0 -Xclang -disable-O0-optnone \
                -S -emit-llvm \
+               -Wno-implicit-function-declaration \
                -I"$include_dir" \
                -I"$MIBENCH_DIR" \
                "$src_file" -o "$ir_file" 2>/dev/null || {

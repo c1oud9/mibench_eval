@@ -19,7 +19,7 @@ MODEL_DIR = Path("/data/sofusion20/models")
 # ============================================================
 # LLVM 도구 경로 (Seraph에 설치된 LLVM 17.0.6 기준)
 # ============================================================
-LLVM_BIN = Path("/data/sofusion20/llvm-17/bin")  # 필요시 수정
+LLVM_BIN = Path("/data/sofusion20/anaconda3/envs/llvm-opt/bin") 
 CLANG = LLVM_BIN / "clang"
 OPT = LLVM_BIN / "opt"
 LLC = LLVM_BIN / "llc"
